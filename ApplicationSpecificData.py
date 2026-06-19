@@ -13,4 +13,14 @@ class ApplicationSpecificData:
         if name not in cls._instances:
             cls._instances[name] = cls(name, 0)
         return cls._instances[name]
-            
+    
+    @classmethod
+    def clear_data(cls):
+        cls._instances = {}
+
+    @classmethod
+    def get_all_instances_to_string(cls):
+        tempStr = ""
+        for instance in cls._instances.values():
+            tempStr += f"{instance.to_string()}\n"
+        return tempStr.rstrip()
