@@ -8,6 +8,7 @@ import win32con
 import time
 from ApplicationSpecificData import ApplicationSpecificData
 
+system_processes = {"Microsoft® Windows® Operating System"}
 
 class ForegroundApplicationTracker:
     def __init__(self) -> None:
@@ -50,8 +51,9 @@ class ForegroundApplicationTracker:
             self.app_instance.total_duration += new_time - self.old_time
         self.old_time = new_time
 
-        app_name = self.get_foreground_application(hwnd)
-        self.app_instance = ApplicationSpecificData.get_or_create(app_name)
+        app_name = self.get_foreground_application(hwnd)    
+        if app_name not in system_processes:
+            self.app_instance = ApplicationSpecificData.get_or_create(app_name)
 
     def start(self) -> None:
         ApplicationSpecificData.clear_data()

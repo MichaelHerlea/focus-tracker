@@ -19,8 +19,16 @@ class ApplicationSpecificData:
         cls._instances = {}
 
     @classmethod
+    # for debugging
     def get_all_instances_to_string(cls):
         tempStr = ""
         for instance in cls._instances.values():
             tempStr += f"{instance.to_string()}\n"
         return tempStr.rstrip()
+    
+    @classmethod
+    def get_chart_data(cls):
+        return_value: dict = {}
+        for name, obj in cls._instances.items():
+            return_value[name] = obj.total_duration
+        return return_value
