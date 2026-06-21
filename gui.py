@@ -1,10 +1,11 @@
 from PyQt6.QtWidgets import * # type: ignore
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from application_tracker import ApplicationTracker, ApplicationSpecificData
+from application_tracker import ApplicationTracker, ApplicationData
+from webcam_tracker import WebcamTracker
 
 class MainWindow(QWidget):
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
 
         self.application_tracker = ApplicationTracker()
@@ -39,11 +40,10 @@ class MainWindow(QWidget):
     def on_stop_button_clicked(self):
         self.application_tracker.stop()
         self.status_indicator.set_color("red")
-        self.pie_chart.update_chart(ApplicationSpecificData.get_chart_data())
-        #print(ApplicationSpecificData.get_all_instances_to_string())
+        self.pie_chart.update_chart(ApplicationData.get_chart_data())
 
 class StatusIndicator(QLabel):
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
         self.setFixedSize(16, 16)
         self.set_color("red")        

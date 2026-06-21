@@ -6,15 +6,17 @@ import ctypes
 import ctypes.wintypes
 import win32con
 import time
+import threading
 
 system_processes = {"Microsoft® Windows® Operating System"}
 
 class ApplicationTracker:
-    def __init__(self) -> None:
+    def __init__(self):
         self.old_time: float = time.time()
         self.app_instance = None
 
         self.user32 = ctypes.windll.user32
+        self.kernel32 = ctypes.windll.kernel32
 
         self.WinEventProc = ctypes.CFUNCTYPE(
             None,
@@ -28,6 +30,10 @@ class ApplicationTracker:
         )
         self.callback = self.WinEventProc(self.on_foreground_change)
         self.hook = None
+
+        self.thread = None
+        self.thread_id = None
+        self.lock = threading.Lock()
 
     def get_foreground_application(self, hwnd) -> str:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -46,18 +52,20 @@ class ApplicationTracker:
 
     def on_foreground_change(self, hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime):
         new_time: float = time.time()
-        if self.app_instance is not None:
-            self.app_instance.total_duration += new_time - self.old_time
-        self.old_time = new_time
+        with self.lock:
+            if self.app_instance is not None:
+                self.app_instance.total_duration += new_time - self.old_time
+            self.old_time = new_time
 
-        app_name = self.get_foreground_application(hwnd)    
-        if app_name not in system_processes:
-            self.app_instance = ApplicationSpecificData.get_or_create(app_name)
-        else:
-            self.app_instance = None
+            app_name = self.get_foreground_application(hwnd)
+            if app_name not in system_processes:
+                self.app_instance = ApplicationData.get_or_create(app_name)
+            else:
+                self.app_instance = None
 
-    def start(self) -> None:
-        ApplicationSpecificData.clear_data()
+    def run(self):
+        self._thread_id = self.kernel32.GetCurrentThreadId()
+
         self.hook = self.user32.SetWinEventHook(
             win32con.EVENT_SYSTEM_FOREGROUND,
             win32con.EVENT_SYSTEM_FOREGROUND,
@@ -70,16 +78,30 @@ class ApplicationTracker:
             self.user32.TranslateMessage(ctypes.byref(msg))
             self.user32.DispatchMessageW(ctypes.byref(msg))
 
-    def stop(self) -> None:
-        if self.app_instance is not None:
-            new_time: float = time.time()
-            self.app_instance.total_duration += new_time - self.old_time
-            self.app_instance = None
         if self.hook:
             self.user32.UnhookWinEvent(self.hook)
             self.hook = None
 
-class ApplicationSpecificData:
+    def start(self):
+        ApplicationData.clear_data()
+        self._thread = threading.Thread(target=self.run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        with self.lock:
+            if self.app_instance is not None:
+                new_time: float = time.time()
+                self.app_instance.total_duration += new_time - self.old_time
+                self.app_instance = None
+
+        if self._thread_id is not None:
+            WM_QUIT = 0x0012
+            self.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
+
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+class ApplicationData:
     _instances: dict = {}
 
     def __init__(self, name, total_duration) -> None:
