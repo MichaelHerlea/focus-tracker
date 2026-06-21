@@ -6,11 +6,10 @@ import ctypes
 import ctypes.wintypes
 import win32con
 import time
-from ApplicationSpecificData import ApplicationSpecificData
 
 system_processes = {"Microsoft® Windows® Operating System"}
 
-class ForegroundApplicationTracker:
+class ApplicationTracker:
     def __init__(self) -> None:
         self.old_time: float = time.time()
         self.app_instance = None
@@ -54,6 +53,8 @@ class ForegroundApplicationTracker:
         app_name = self.get_foreground_application(hwnd)    
         if app_name not in system_processes:
             self.app_instance = ApplicationSpecificData.get_or_create(app_name)
+        else:
+            self.app_instance = None
 
     def start(self) -> None:
         ApplicationSpecificData.clear_data()
@@ -77,3 +78,38 @@ class ForegroundApplicationTracker:
         if self.hook:
             self.user32.UnhookWinEvent(self.hook)
             self.hook = None
+
+class ApplicationSpecificData:
+    _instances: dict = {}
+
+    def __init__(self, name, total_duration) -> None:
+        self.name = name
+        self.total_duration = total_duration
+
+    def to_string(self) -> str:
+        return f"The user has spent {self.total_duration:.0f} seconds on {self.name}"
+
+    @classmethod
+    def get_or_create(cls, name: str):
+        if name not in cls._instances:
+            cls._instances[name] = cls(name, 0)
+        return cls._instances[name]
+    
+    @classmethod
+    def clear_data(cls):
+        cls._instances = {}
+
+    @classmethod
+    # for debugging
+    def get_all_instances_to_string(cls):
+        tempStr = ""
+        for instance in cls._instances.values():
+            tempStr += f"{instance.to_string()}\n"
+        return tempStr.rstrip()
+    
+    @classmethod
+    def get_chart_data(cls):
+        return_value: dict = {}
+        for name, obj in cls._instances.items():
+            return_value[name] = obj.total_duration
+        return return_value

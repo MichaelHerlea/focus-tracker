@@ -1,14 +1,13 @@
 from PyQt6.QtWidgets import * # type: ignore
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from ForegroundApplicationTracker import ForegroundApplicationTracker
-from ApplicationSpecificData import ApplicationSpecificData
+from application_tracker import ApplicationTracker, ApplicationSpecificData
 
 class MainWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        self.application_tracker = ForegroundApplicationTracker()
+        self.application_tracker = ApplicationTracker()
 
         self.setWindowTitle("Focus tracker")
 
