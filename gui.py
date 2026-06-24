@@ -1,14 +1,15 @@
-from PyQt6.QtWidgets import * # type: ignore
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from application_tracker import ApplicationTracker, ApplicationData
-from webcam_tracker import WebcamTracker
+from database_connector import DatabaseInitializer, ReportDatabaseHandler
 
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
         self.application_tracker = ApplicationTracker()
+        self.database_connector = DatabaseInitializer()
 
         self.setWindowTitle("Focus tracker")
 
@@ -40,7 +41,9 @@ class MainWindow(QWidget):
     def on_stop_button_clicked(self):
         self.application_tracker.stop()
         self.status_indicator.set_color("red")
-        self.pie_chart.update_chart(ApplicationData.get_chart_data())
+        self.pie_chart.update_chart(ApplicationData.get_data())
+        ReportDatabaseHandler().add_report(ApplicationData.get_data())
+        ApplicationData.clear_data()
 
 class StatusIndicator(QLabel):
     def __init__(self):

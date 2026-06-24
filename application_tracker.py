@@ -119,7 +119,7 @@ class ApplicationData:
     
     @classmethod
     def clear_data(cls):
-        cls._instances = {}
+        cls._instances.clear()
 
     @classmethod
     # for debugging
@@ -130,7 +130,7 @@ class ApplicationData:
         return tempStr.rstrip()
     
     @classmethod
-    def get_chart_data(cls):
+    def get_data(cls):
         return_value: dict = {}
         for name, obj in cls._instances.items():
             return_value[name] = obj.total_duration
