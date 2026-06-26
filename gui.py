@@ -86,6 +86,7 @@ class ReportList(QWidget):
     
     def load_report(self, entry_id):
         self.pie_chart.update_chart(dict(self.report_database_handler.get_report_contents(entry_id)))
+        print(self.report_database_handler.get_relevant_application_categories(entry_id))
 
 class ReportItem(QWidget):
     def __init__(self, list, parent_list: ReportList):
