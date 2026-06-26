@@ -63,6 +63,7 @@ class ReportDatabaseHandler():
             
             self.cursor_obj.execute(add_report_entries_query, (report_id, application_id, data[name]))
         self.connection_obj.commit()
+        return report_id
 
     def get_report_list(self):
         get_report_list_query = "SELECT id, created_at FROM reports"
@@ -83,3 +84,11 @@ class ReportDatabaseHandler():
         get_relevant_application_categories_query = "SELECT a.name, ac.name FROM applications a JOIN application_categories ac ON a.category_id = ac.id JOIN report_entries re ON re.application_id = a.id WHERE re.report_id = ?"
         self.cursor_obj.execute(get_relevant_application_categories_query, (entry_id,))
         return self.cursor_obj.fetchall()
+    
+    def update_application_category(self, name, category_text):
+        get_category_id = "SELECT id FROM application_categories WHERE name = ?"
+        self.cursor_obj.execute(get_category_id, (category_text, ))
+        category_id = self.cursor_obj.fetchone()[0]
+        update_application_category = "UPDATE applications SET category_id = ? WHERE name = ?"
+        self.cursor_obj.execute(update_application_category, (category_id, name))
+        self.connection_obj.commit()

@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication
+from PyQt6.QtWidgets import QComboBox, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from application_tracker import ApplicationTracker, ApplicationData
@@ -37,7 +37,10 @@ class MainWindow(QWidget):
         self.pie_chart = PieChartWidget()
         main_layout.addWidget(self.pie_chart)
 
-        self.report_list = ReportList(self.report_database_handler, self.pie_chart)
+        self.application_category = ApplicationCategoryList(self.report_database_handler)
+        main_layout.addWidget(self.application_category)
+
+        self.report_list = ReportList(self.application_category, self.report_database_handler, self.pie_chart)
         main_layout.addWidget(self.report_list)
 
         self.setLayout(main_layout)
@@ -51,14 +54,67 @@ class MainWindow(QWidget):
         self.application_tracker.stop()
         self.status_indicator.set_color("red")
         self.pie_chart.update_chart(ApplicationData.get_data())
-        self.report_database_handler.add_report(ApplicationData.get_data())
+        entry_id = self.report_database_handler.add_report(ApplicationData.get_data())
+        self.application_category.update_list(self.report_database_handler.get_relevant_application_categories(entry_id))
         self.report_list.update_list()
         ApplicationData.clear_data()
 
-class ReportList(QWidget):
-    def __init__(self, report_database_handler: ReportDatabaseHandler, pie_chart: PieChartWidget):
+class ApplicationCategoryList(QWidget):
+    def __init__(self, report_database_handler: ReportDatabaseHandler):
         super().__init__()
 
+        self.report_database_handler = report_database_handler
+
+        self.list = None
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+
+    def update_list(self, list):
+        self.clear_list()
+        self.list = list
+        for entry in self.list:
+            self.main_layout.addWidget(ApplicationCategoryItem(entry, self))
+    
+    def clear_list(self):
+        while self.main_layout.count():
+            item = self.main_layout.takeAt(0)
+            widget = item.widget() # type: ignore
+            if widget is not None:
+                widget.deleteLater()
+    
+    def update_database(self, name, text):
+        self.report_database_handler.update_application_category(name, text)
+
+class ApplicationCategoryItem(QWidget):
+    def __init__(self, list, parent_list: ApplicationCategoryList):
+        super().__init__()
+
+        self.parent_list = parent_list
+
+        main_layout = QHBoxLayout()
+
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(5)
+
+        text = QLabel(f"application: {list[0]}, type: ")
+        main_layout.addWidget(text)
+
+        self.dropdown = QComboBox()
+        self.dropdown.addItems(["productivity", "entertainment", "other"])
+        self.dropdown.setCurrentText(list[1])
+        self.dropdown.currentTextChanged.connect(lambda text: self.dropdown_change(list[0], text))
+        main_layout.addWidget(self.dropdown)
+
+        self.setLayout(main_layout)
+
+    def dropdown_change(self, name, text):
+        self.parent_list.update_database(name, text)
+
+class ReportList(QWidget):
+    def __init__(self, application_category: ApplicationCategoryList, report_database_handler: ReportDatabaseHandler, pie_chart: PieChartWidget):
+        super().__init__()
+
+        self.application_category = application_category
         self.report_database_handler = report_database_handler
         self.list = None
         self.pie_chart = pie_chart
@@ -86,7 +142,7 @@ class ReportList(QWidget):
     
     def load_report(self, entry_id):
         self.pie_chart.update_chart(dict(self.report_database_handler.get_report_contents(entry_id)))
-        print(self.report_database_handler.get_relevant_application_categories(entry_id))
+        self.application_category.update_list(self.report_database_handler.get_relevant_application_categories(entry_id))
 
 class ReportItem(QWidget):
     def __init__(self, list, parent_list: ReportList):
