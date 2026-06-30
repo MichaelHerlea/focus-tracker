@@ -1,8 +1,13 @@
 import sqlite3
+import time
 
-class DatabaseInitializer():
+from application_tracker import ApplicationData
+
+database_filename = "database.db"
+
+class Database():
     def __init__(self):
-        self.connection_obj = sqlite3.connect("database.db")
+        self.connection_obj = sqlite3.connect(database_filename)
         self.connection_obj.execute("PRAGMA foreign_keys = ON;")
         self.cursor_obj = self.connection_obj.cursor()
         
@@ -17,73 +22,69 @@ class DatabaseInitializer():
 
         create_application_table_query ="CREATE TABLE IF NOT EXISTS applications (" \
             "id INTEGER PRIMARY KEY AUTOINCREMENT," \
-            "name VARCHAR(255) NOT NULL," \
+            "name VARCHAR(255) NOT NULL UNIQUE," \
             "category_id INTEGER NOT NULL," \
             "FOREIGN KEY (category_id) REFERENCES application_categories(id));"
         self.cursor_obj.execute(create_application_table_query)
 
         create_report_table_query = "CREATE TABLE IF NOT EXISTS reports (" \
             "id INTEGER PRIMARY KEY AUTOINCREMENT," \
-            "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);"
+            "created_at TIMESTAMP NOT NULL," \
+            "ended_at TIMESTAMP NOT NULL);"
         self.cursor_obj.execute(create_report_table_query)
 
-        create_report_entries_table_query = "CREATE TABLE IF NOT EXISTS report_entries (" \
+        create_events_table_query = "CREATE TABLE IF NOT EXISTS events (" \
+            "id INTEGER PRIMARY KEY AUTOINCREMENT," \
             "report_id INTEGER NOT NULL," \
             "application_id INTEGER NOT NULL," \
-            "time_spent INTEGER NOT NULL," \
-            "PRIMARY KEY (report_id, application_id)," \
+            "switched_at FLOAT NOT NULL," \
             "FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE," \
             "FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE);"
-        self.cursor_obj.execute(create_report_entries_table_query)
+        self.cursor_obj.execute(create_events_table_query)
         self.connection_obj.commit()
 
-class ReportDatabaseHandler():
-    def __init__(self, database_connection: DatabaseInitializer):
-        self.connection_obj = database_connection.connection_obj
-        self.cursor_obj = database_connection.cursor_obj
-    
-    def add_report(self, data):
-        if not data:
+    def create_report(self, data: ApplicationData):
+        if not data._tab_switches:
             return
-        add_report_query = "INSERT INTO reports DEFAULT VALUES"
-        self.cursor_obj.execute(add_report_query)
-        report_id = self.cursor_obj.lastrowid
-
-        add_report_entries_query = "INSERT INTO report_entries VALUES (?, ?, ?)"
-        get_application_id = "SELECT id FROM applications WHERE name = ?"
-        add_application = "INSERT INTO applications (name, category_id) VALUES (?, ?)"
-        for name in data.keys():
-            self.cursor_obj.execute(get_application_id, (name,))
-            row = self.cursor_obj.fetchone()
-            if row == None:
-                self.cursor_obj.execute(add_application, (name, 3))
-                application_id = self.cursor_obj.lastrowid
-            else:
-                application_id = row[0]
-            
-            self.cursor_obj.execute(add_report_entries_query, (report_id, application_id, data[name]))
-        self.connection_obj.commit()
+        report_id = self.start_new_report(data._tab_switches[0][1])
+        for element in data._tab_switches:
+            self.record_tab_switch(report_id, element[0], element[1])
         return report_id
+    
+    def start_new_report(self, created_at):
+        create_new_report_query = "INSERT INTO reports (created_at, ended_at) VALUES (?, ?)"
+        self.cursor_obj.execute(create_new_report_query, (created_at, time.time()))
+        self.connection_obj.commit()
+        return self.cursor_obj.lastrowid
+    
+    def get_category_id(self, text):
+        get_category_id_query = "SELECT id FROM application_categories WHERE name = ?"
+        self.cursor_obj.execute(get_category_id_query, (text,))
+        return self.cursor_obj.fetchone()[0]
 
-    def get_report_list(self):
-        get_report_list_query = "SELECT id, created_at FROM reports"
-        self.cursor_obj.execute(get_report_list_query)
-        return self.cursor_obj.fetchall()
+    def get_or_create_application_id(self, name):
+        get_application_id = "SELECT id FROM applications WHERE name = ?"
+        create_application = "INSERT INTO applications (name, category_id) VALUES (?, ?)"
+
+        self.cursor_obj.execute(get_application_id, (name,))
+        application_id = self.cursor_obj.fetchone()
+        if not application_id:
+            self.cursor_obj.execute(create_application, (name, self.get_category_id("other")))
+            self.connection_obj.commit()
+            return self.cursor_obj.lastrowid
+        else:
+            self.connection_obj.commit()
+            return application_id[0]
+    
+    def record_tab_switch(self, report_id, name, time):
+        record_tab_switch_query = "INSERT INTO events (report_id, application_id, switched_at) VALUES (?, ?, ?)"
+        self.connection_obj.execute(record_tab_switch_query, (report_id, self.get_or_create_application_id(name), time))
+        self.connection_obj.commit()
 
     def delete_report(self, entry_id):
         delete_report_query = "DELETE FROM reports WHERE id = ?"
         self.cursor_obj.execute(delete_report_query, (entry_id,))
         self.connection_obj.commit()
-    
-    def get_report_contents(self, entry_id):
-        get_report_contents_query = "SELECT a.name, re.time_spent FROM report_entries re JOIN applications a ON re.application_id = a.id WHERE re.report_id = ?"
-        self.cursor_obj.execute(get_report_contents_query, (entry_id,))
-        return self.cursor_obj.fetchall()
-    
-    def get_relevant_application_categories(self, entry_id):
-        get_relevant_application_categories_query = "SELECT a.name, ac.name FROM applications a JOIN application_categories ac ON a.category_id = ac.id JOIN report_entries re ON re.application_id = a.id WHERE re.report_id = ?"
-        self.cursor_obj.execute(get_relevant_application_categories_query, (entry_id,))
-        return self.cursor_obj.fetchall()
     
     def update_application_category(self, name, category_text):
         get_category_id = "SELECT id FROM application_categories WHERE name = ?"
@@ -92,3 +93,36 @@ class ReportDatabaseHandler():
         update_application_category = "UPDATE applications SET category_id = ? WHERE name = ?"
         self.cursor_obj.execute(update_application_category, (category_id, name))
         self.connection_obj.commit()
+    
+    def get_pie_chart_data(self, report_id):
+        query = """WITH EventDurations AS (
+            SELECT 
+                e.application_id,
+                COALESCE(
+                    LEAD(e.switched_at) OVER (PARTITION BY e.report_id ORDER BY e.switched_at), 
+                    r.ended_at
+                ) - e.switched_at AS duration
+            FROM events e
+            JOIN reports r ON e.report_id = r.id
+            WHERE e.report_id = ?
+        )
+        SELECT 
+            a.name,
+            SUM(ed.duration)
+        FROM EventDurations ed
+        JOIN applications a ON ed.application_id = a.id
+        GROUP BY a.id, a.name
+        ORDER BY SUM(ed.duration) DESC;"""
+        
+        self.cursor_obj.execute(query, (report_id,))
+        return self.cursor_obj.fetchall()
+    
+    def get_application_category_list(self, report_id):
+        get_application_category_list_query = "SELECT DISTINCT a.name, c.name FROM events e JOIN applications a ON e.application_id = a.id JOIN application_categories c ON a.category_id = c.id WHERE e.report_id = ?;"
+        self.cursor_obj.execute(get_application_category_list_query, (report_id,))
+        return self.cursor_obj.fetchall()
+    
+    def get_list_of_reports(self):
+        get_list_of_reports_query = "SELECT id FROM reports"
+        self.cursor_obj.execute(get_list_of_reports_query)
+        return self.cursor_obj.fetchall()

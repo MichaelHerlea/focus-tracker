@@ -8,12 +8,11 @@ import win32con
 import time
 import threading
 
-system_processes = {"Microsoft® Windows® Operating System"}
+#system_processes = {"Microsoft® Windows® Operating System"}
 
 class ApplicationTracker:
     def __init__(self):
-        self.old_time: float = time.time()
-        self.app_instance = None
+        self.application_data = ApplicationData()
 
         self.user32 = ctypes.windll.user32
         self.kernel32 = ctypes.windll.kernel32
@@ -51,20 +50,12 @@ class ApplicationTracker:
             return psutil.Process(pid).name()
 
     def on_foreground_change(self, hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime):
-        new_time: float = time.time()
         with self.lock:
-            if self.app_instance is not None:
-                self.app_instance.total_duration += new_time - self.old_time
-            self.old_time = new_time
-
             app_name = self.get_foreground_application(hwnd)
-            if app_name not in system_processes:
-                self.app_instance = ApplicationData.get_or_create(app_name)
-            else:
-                self.app_instance = None
+            self.application_data.record_tab_switch(app_name, time.time())
 
     def run(self):
-        self._thread_id = self.kernel32.GetCurrentThreadId()
+        self.thread_id = self.kernel32.GetCurrentThreadId()
 
         self.hook = self.user32.SetWinEventHook(
             win32con.EVENT_SYSTEM_FOREGROUND,
@@ -83,55 +74,26 @@ class ApplicationTracker:
             self.hook = None
 
     def start(self):
-        ApplicationData.clear_data()
-        self._thread = threading.Thread(target=self.run, daemon=True)
-        self._thread.start()
+        self.application_data.clear_data()
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
 
     def stop(self):
-        with self.lock:
-            if self.app_instance is not None:
-                new_time: float = time.time()
-                self.app_instance.total_duration += new_time - self.old_time
-                self.app_instance = None
-
-        if self._thread_id is not None:
+        if self.thread_id is not None:
             WM_QUIT = 0x0012
-            self.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
+            self.user32.PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0)
 
-        if self._thread is not None:
-            self._thread.join(timeout=2)
+        if self.thread is not None:
+            self.thread.join(timeout=2)
 
 class ApplicationData:
-    _instances: dict = {}
+    _tab_switches = []
 
-    def __init__(self, name, total_duration) -> None:
-        self.name = name
-        self.total_duration = total_duration
+    def __init__(self):
+        pass
 
-    def to_string(self) -> str:
-        return f"The user has spent {self.total_duration:.0f} seconds on {self.name}"
-
-    @classmethod
-    def get_or_create(cls, name: str):
-        if name not in cls._instances:
-            cls._instances[name] = cls(name, 0)
-        return cls._instances[name]
+    def record_tab_switch(self, name, timestamp):
+        self._tab_switches.append((name, timestamp))
     
-    @classmethod
-    def clear_data(cls):
-        cls._instances.clear()
-
-    @classmethod
-    # for debugging
-    def get_all_instances_to_string(cls):
-        tempStr = ""
-        for instance in cls._instances.values():
-            tempStr += f"{instance.to_string()}\n"
-        return tempStr.rstrip()
-    
-    @classmethod
-    def get_data(cls):
-        return_value: dict = {}
-        for name, obj in cls._instances.items():
-            return_value[name] = obj.total_duration
-        return return_value
+    def clear_data(self):
+        self._tab_switches.clear()

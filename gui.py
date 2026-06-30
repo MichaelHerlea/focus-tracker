@@ -2,20 +2,16 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QComboBox, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from application_tracker import ApplicationTracker, ApplicationData
-from database_connector import DatabaseInitializer, ReportDatabaseHandler
+from application_tracker import ApplicationTracker
+from database_connector import Database
 
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        temp_var = ["Report id: 1, Timestamp: 21min",
-            "Report id: 2, Timestamp: 24min",
-            "Report id: 3, Timestamp: 35min"]
-
+        self.database = Database()
         self.application_tracker = ApplicationTracker()
-        self.database_Initializer = DatabaseInitializer()
-        self.report_database_handler = ReportDatabaseHandler(self.database_Initializer)
+        self.application_data = self.application_tracker.application_data
 
         self.setWindowTitle("Focus tracker")
 
@@ -37,35 +33,46 @@ class MainWindow(QWidget):
         self.pie_chart = PieChartWidget()
         main_layout.addWidget(self.pie_chart)
 
-        self.application_category = ApplicationCategoryList(self.report_database_handler)
+        self.application_category = ApplicationCategoryList(self)
         main_layout.addWidget(self.application_category)
 
-        self.report_list = ReportList(self.application_category, self.report_database_handler, self.pie_chart)
+        self.report_list = ReportList(self)
         main_layout.addWidget(self.report_list)
+
+        self.load_report(None)
 
         self.setLayout(main_layout)
     
     def on_start_button_clicked(self):
         self.status_indicator.set_color("green")
-        self.pie_chart.update_chart({})
+        self.load_report(None)
         self.application_tracker.start()
     
     def on_stop_button_clicked(self):
         self.application_tracker.stop()
         self.status_indicator.set_color("red")
-        self.pie_chart.update_chart(ApplicationData.get_data())
-        entry_id = self.report_database_handler.add_report(ApplicationData.get_data())
-        self.application_category.update_list(self.report_database_handler.get_relevant_application_categories(entry_id))
-        self.report_list.update_list()
-        ApplicationData.clear_data()
+        report_id = self.database.create_report(self.application_data)
+        self.application_data.clear_data()
+        self.load_report(report_id)
+    
+    def update_application_category(self, name, text):
+        self.database.update_application_category(name, text)
+    
+    def delete_report(self, report_id):
+        self.database.delete_report(report_id)
+        self.load_report(None)
+
+    def load_report(self, report_id):
+        self.pie_chart.update_chart(dict(self.database.get_pie_chart_data(report_id)))
+        self.application_category.update_list(self.database.get_application_category_list(report_id))
+        self.report_list.update_list(self.database.get_list_of_reports())
 
 class ApplicationCategoryList(QWidget):
-    def __init__(self, report_database_handler: ReportDatabaseHandler):
+    def __init__(self, parent_obj):
         super().__init__()
 
-        self.report_database_handler = report_database_handler
-
         self.list = None
+        self.parent_obj = parent_obj
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
@@ -83,13 +90,13 @@ class ApplicationCategoryList(QWidget):
                 widget.deleteLater()
     
     def update_database(self, name, text):
-        self.report_database_handler.update_application_category(name, text)
+        self.parent_obj.update_application_category(name, text)
 
 class ApplicationCategoryItem(QWidget):
-    def __init__(self, list, parent_list: ApplicationCategoryList):
+    def __init__(self, list, parent: ApplicationCategoryList):
         super().__init__()
 
-        self.parent_list = parent_list
+        self.parent_list = parent
 
         main_layout = QHBoxLayout()
 
@@ -111,23 +118,20 @@ class ApplicationCategoryItem(QWidget):
         self.parent_list.update_database(name, text)
 
 class ReportList(QWidget):
-    def __init__(self, application_category: ApplicationCategoryList, report_database_handler: ReportDatabaseHandler, pie_chart: PieChartWidget):
+    def __init__(self, parent_obj):
         super().__init__()
 
-        self.application_category = application_category
-        self.report_database_handler = report_database_handler
+        self.parent_obj = parent_obj
         self.list = None
-        self.pie_chart = pie_chart
 
         self.main_layout = QVBoxLayout()
-        self.update_list()
         self.setLayout(self.main_layout)
 
-    def update_list(self):
+    def update_list(self, list):
         self.clear_list()
-        self.list = self.report_database_handler.get_report_list()
+        self.list = list
         for entry in self.list:
-            self.main_layout.addWidget(ReportItem(entry, self))
+            self.main_layout.addWidget(ReportItem(entry[0], self))
     
     def clear_list(self):
         while self.main_layout.count():
@@ -136,16 +140,14 @@ class ReportList(QWidget):
             if widget is not None:
                 widget.deleteLater()
 
-    def delete_entry(self, entry_id):
-        self.report_database_handler.delete_report(entry_id)
-        self.update_list()
+    def delete_entry(self, report_id):
+        self.parent_obj.delete_report(report_id)
     
-    def load_report(self, entry_id):
-        self.pie_chart.update_chart(dict(self.report_database_handler.get_report_contents(entry_id)))
-        self.application_category.update_list(self.report_database_handler.get_relevant_application_categories(entry_id))
+    def load_report(self, report_id):
+        self.parent_obj.load_report(report_id)
 
 class ReportItem(QWidget):
-    def __init__(self, list, parent_list: ReportList):
+    def __init__(self, id, parent_list: ReportList):
         super().__init__()
 
         self.parent_list = parent_list
@@ -155,15 +157,15 @@ class ReportItem(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(5)
 
-        text = QLabel(f"ID: {list[0]}, timestamp: {list[1]}")
+        text = QLabel(f"ID: {id}")
         main_layout.addWidget(text)
 
         open_button = QPushButton("Open")
-        open_button.clicked.connect(lambda: self.open_button_handler(list[0]))
+        open_button.clicked.connect(lambda: self.open_button_handler(id))
         main_layout.addWidget(open_button)
 
         delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(lambda: self.delete_button_handler(list[0]))
+        delete_button.clicked.connect(lambda: self.delete_button_handler(id))
         main_layout.addWidget(delete_button)
 
         self.setLayout(main_layout)
@@ -188,6 +190,7 @@ class StatusIndicator(QLabel):
 
 class PieChartWidget(FigureCanvasQTAgg):
     def __init__(self):
+
         self.fig = Figure()
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
