@@ -159,3 +159,40 @@ class Database():
         get_list_of_reports_query = "SELECT id FROM reports"
         self.cursor_obj.execute(get_list_of_reports_query)
         return self.cursor_obj.fetchall()
+    
+    def get_score_history(self):
+        get_score_history_query = """WITH EventDurations AS (
+                SELECT 
+                    e.report_id,
+                    e.application_id,
+                    COALESCE(
+                        LEAD(e.switched_at) OVER (PARTITION BY e.report_id ORDER BY e.switched_at), 
+                        r.ended_at
+                    ) - e.switched_at AS duration
+                FROM events e
+                JOIN reports r ON e.report_id = r.id
+            ),
+            CategoryTotals AS (
+                SELECT 
+                    ed.report_id,
+                    c.name,
+                    SUM(ed.duration) AS total_duration
+                FROM EventDurations ed
+                JOIN applications a ON ed.application_id = a.id
+                JOIN application_categories c ON a.category_id = c.id
+                WHERE c.name IN ('productivity', 'entertainment')
+                GROUP BY ed.report_id, c.name
+            )
+            SELECT 
+                ct.report_id,
+                ROUND(
+                    SUM(CASE WHEN ct.name = 'productivity' THEN ct.total_duration ELSE 0 END) * 100.0 /
+                    NULLIF(SUM(ct.total_duration), 0)
+                ) AS productivity_score
+            FROM CategoryTotals ct
+            JOIN reports r ON ct.report_id = r.id
+            GROUP BY ct.report_id
+            ORDER BY r.created_at ASC;"""
+
+        self.cursor_obj.execute(get_score_history_query)
+        return self.cursor_obj.fetchall()

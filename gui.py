@@ -1,9 +1,18 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QComboBox, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication
+from PyQt6.QtWidgets import QComboBox, QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication
+from matplotlib import pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from application_tracker import ApplicationTracker
 from database_connector import Database
+
+plt.rcParams.update({
+    "text.color": "white",
+    "axes.labelcolor": "white",
+    "xtick.color": "white",
+    "ytick.color": "white",
+    "axes.edgecolor": "white",
+})
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -18,7 +27,6 @@ class MainWindow(QWidget):
         self.setWindowTitle("Focus tracker")
 
         main_layout = QVBoxLayout()
-        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         control_panel = QHBoxLayout()
         start_button = QPushButton("Start")
@@ -34,17 +42,29 @@ class MainWindow(QWidget):
         main_layout.addLayout(control_panel)
 
         self.pie_chart = PieChartWidget()
-        main_layout.addWidget(self.pie_chart)
+        main_layout.addWidget(self.pie_chart, 2)
+
+        report_interaction_HBox = QHBoxLayout()
+        self.report_list = ReportList(self)
+        report_list_scroll = QScrollArea()
+        report_list_scroll.setWidget(self.report_list)
+        report_list_scroll.setWidgetResizable(True)
+        report_interaction_HBox.addWidget(report_list_scroll)
 
         self.application_category = ApplicationCategoryList(self)
-        main_layout.addWidget(self.application_category)
+        application_category_scroll = QScrollArea()
+        application_category_scroll.setWidget(self.application_category)
+        application_category_scroll.setWidgetResizable(True)
+        report_interaction_HBox.addWidget(application_category_scroll)
+        main_layout.addLayout(report_interaction_HBox, 1)
 
-        self.report_list = ReportList(self)
-        main_layout.addWidget(self.report_list)
+        self.line_chart = LineChartWidget()
+        main_layout.addWidget(self.line_chart, 1)
 
         self.load_report(None)
 
         self.setLayout(main_layout)
+        self.resize(800, 800)
     
     def on_start_button_clicked(self):
         self.status_indicator.set_color("green")
@@ -70,6 +90,7 @@ class MainWindow(QWidget):
         self.pie_chart.update_chart(dict(self.database.get_pie_chart_data(report_id)))
         self.application_category.update_list(self.database.get_application_category_list(report_id))
         self.report_list.update_list(self.database.get_list_of_reports())
+        self.line_chart.update_chart(self.database.get_score_history())
         self.currently_loaded_report_id = report_id
     
     def get_productivity_score(self, report_id):
@@ -82,6 +103,7 @@ class ApplicationCategoryList(QWidget):
         self.list = None
         self.parent_obj = parent_obj
         self.main_layout = QVBoxLayout()
+        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.setLayout(self.main_layout)
 
     def update_list(self, list):
@@ -133,6 +155,7 @@ class ReportList(QWidget):
         self.list = None
 
         self.main_layout = QVBoxLayout()
+        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.setLayout(self.main_layout)
 
     def update_list(self, list):
@@ -171,7 +194,7 @@ class ReportItem(QWidget):
         text = QLabel(f"ID: {id}, Score: {self.parent_list.get_productivity_score(id)}")
         main_layout.addWidget(text)
 
-        open_button = QPushButton("Open")
+        open_button = QPushButton("Display")
         open_button.clicked.connect(lambda: self.open_button_handler(id))
         main_layout.addWidget(open_button)
 
@@ -203,8 +226,12 @@ class PieChartWidget(FigureCanvasQTAgg):
     def __init__(self):
 
         self.fig = Figure()
+        self.fig = Figure(facecolor="none")
         self.ax = self.fig.add_subplot(111)
+        self.ax.set_facecolor("none")
         super().__init__(self.fig)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background-color: transparent;")
         self.update_chart({})
 
     def update_chart(self, data: dict):
@@ -221,6 +248,39 @@ class PieChartWidget(FigureCanvasQTAgg):
 
         self.ax.pie(values, labels=labels, autopct="%1.1f%%")
         self.ax.set_title("Time per Application")
+
+        self.draw()
+
+class LineChartWidget(FigureCanvasQTAgg):
+    def __init__(self):
+
+        self.fig = Figure(facecolor="none")
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_facecolor("none")
+        super().__init__(self.fig)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background-color: transparent;")
+        self.update_chart([])
+
+    def update_chart(self, data: list):
+        self.ax.clear()
+
+        if not data:
+            self.ax.set_title("Focus Score History")
+            self.ax.set_axis_off()
+            self.draw()
+            return
+
+        report_ids, scores = zip(*data)
+
+        self.ax.plot(report_ids, scores, marker="o")
+        self.ax.set_title("Focus Score History")
+        self.ax.set_ylabel("Productivity Score (%)")
+        self.ax.set_ylim(0, 100)
+        self.ax.set_xticks(report_ids)
+
+        self.ax.spines["top"].set_visible(False)
+        self.ax.spines["right"].set_visible(False)
 
         self.draw()
 
