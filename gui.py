@@ -13,9 +13,12 @@ class MainWindow(QWidget):
         self.application_tracker = ApplicationTracker()
         self.application_data = self.application_tracker.application_data
 
+        self.currently_loaded_report_id = None
+
         self.setWindowTitle("Focus tracker")
 
         main_layout = QVBoxLayout()
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         control_panel = QHBoxLayout()
         start_button = QPushButton("Start")
@@ -57,6 +60,7 @@ class MainWindow(QWidget):
     
     def update_application_category(self, name, text):
         self.database.update_application_category(name, text)
+        self.load_report(self.currently_loaded_report_id)
     
     def delete_report(self, report_id):
         self.database.delete_report(report_id)
@@ -66,6 +70,10 @@ class MainWindow(QWidget):
         self.pie_chart.update_chart(dict(self.database.get_pie_chart_data(report_id)))
         self.application_category.update_list(self.database.get_application_category_list(report_id))
         self.report_list.update_list(self.database.get_list_of_reports())
+        self.currently_loaded_report_id = report_id
+    
+    def get_productivity_score(self, report_id):
+        return self.database.get_productivity_score(report_id)
 
 class ApplicationCategoryList(QWidget):
     def __init__(self, parent_obj):
@@ -103,7 +111,7 @@ class ApplicationCategoryItem(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(5)
 
-        text = QLabel(f"application: {list[0]}, type: ")
+        text = QLabel(f"{list[0]}")
         main_layout.addWidget(text)
 
         self.dropdown = QComboBox()
@@ -145,6 +153,9 @@ class ReportList(QWidget):
     
     def load_report(self, report_id):
         self.parent_obj.load_report(report_id)
+    
+    def get_productivity_score(self, report_id):
+        return self.parent_obj.get_productivity_score(report_id)
 
 class ReportItem(QWidget):
     def __init__(self, id, parent_list: ReportList):
@@ -157,7 +168,7 @@ class ReportItem(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(5)
 
-        text = QLabel(f"ID: {id}")
+        text = QLabel(f"ID: {id}, Score: {self.parent_list.get_productivity_score(id)}")
         main_layout.addWidget(text)
 
         open_button = QPushButton("Open")

@@ -29,8 +29,8 @@ class Database():
 
         create_report_table_query = "CREATE TABLE IF NOT EXISTS reports (" \
             "id INTEGER PRIMARY KEY AUTOINCREMENT," \
-            "created_at TIMESTAMP NOT NULL," \
-            "ended_at TIMESTAMP NOT NULL);"
+            "created_at FLOAT NOT NULL," \
+            "ended_at FLOAT NOT NULL);"
         self.cursor_obj.execute(create_report_table_query)
 
         create_events_table_query = "CREATE TABLE IF NOT EXISTS events (" \
@@ -95,7 +95,7 @@ class Database():
         self.connection_obj.commit()
     
     def get_pie_chart_data(self, report_id):
-        query = """WITH EventDurations AS (
+        get_pie_chart_data_query = """WITH EventDurations AS (
             SELECT 
                 e.application_id,
                 COALESCE(
@@ -114,8 +114,41 @@ class Database():
         GROUP BY a.id, a.name
         ORDER BY SUM(ed.duration) DESC;"""
         
-        self.cursor_obj.execute(query, (report_id,))
+        self.cursor_obj.execute(get_pie_chart_data_query, (report_id,))
         return self.cursor_obj.fetchall()
+
+    def get_productivity_score(self, report_id):
+        get_productivity_score_query = """WITH EventDurations AS (
+            SELECT 
+                e.application_id,
+                COALESCE(
+                    LEAD(e.switched_at) OVER (PARTITION BY e.report_id ORDER BY e.switched_at), 
+                    r.ended_at
+                ) - e.switched_at AS duration
+            FROM events e
+            JOIN reports r ON e.report_id = r.id
+            WHERE e.report_id = ?
+        ),
+        CategoryTotals AS (
+            SELECT 
+                c.name,
+                SUM(ed.duration) AS total_duration
+            FROM EventDurations ed
+            JOIN applications a ON ed.application_id = a.id
+            JOIN application_categories c ON a.category_id = c.id
+            WHERE c.name IN ('productivity', 'entertainment')
+            GROUP BY c.name
+        )
+        SELECT 
+            SUM(CASE WHEN name = 'productivity' THEN total_duration ELSE 0 END) * 1.0 /
+            NULLIF(SUM(total_duration), 0) AS productivity_score
+        FROM CategoryTotals;"""
+
+        self.cursor_obj.execute(get_productivity_score_query, (report_id,))
+        score = self.cursor_obj.fetchone()[0]
+        if score is None:
+            return score
+        return round(score * 100)
     
     def get_application_category_list(self, report_id):
         get_application_category_list_query = "SELECT DISTINCT a.name, c.name FROM events e JOIN applications a ON e.application_id = a.id JOIN application_categories c ON a.category_id = c.id WHERE e.report_id = ?;"
