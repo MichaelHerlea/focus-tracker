@@ -196,3 +196,27 @@ class Database():
 
         self.cursor_obj.execute(get_score_history_query)
         return self.cursor_obj.fetchall()
+    
+    def get_timeline_data(self, report_id):
+        get_timeline_data_query = """WITH EventDurations AS (
+            SELECT 
+                e.application_id,
+                e.switched_at,
+                COALESCE(
+                    LEAD(e.switched_at) OVER (PARTITION BY e.report_id ORDER BY e.switched_at), 
+                    r.ended_at
+                ) - e.switched_at AS duration
+            FROM events e
+            JOIN reports r ON e.report_id = r.id
+            WHERE e.report_id = ?
+        )
+        SELECT 
+            a.name,
+            ed.switched_at,
+            ed.duration
+        FROM EventDurations ed
+        JOIN applications a ON ed.application_id = a.id
+        ORDER BY ed.switched_at ASC;"""
+
+        self.cursor_obj.execute(get_timeline_data_query, (report_id,))
+        return self.cursor_obj.fetchall()

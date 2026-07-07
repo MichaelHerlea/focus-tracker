@@ -44,6 +44,9 @@ class MainWindow(QWidget):
         self.pie_chart = PieChartWidget()
         main_layout.addWidget(self.pie_chart, 2)
 
+        self.timeline_chart = TimelineChartWidget()
+        main_layout.addWidget(self.timeline_chart, 1)
+
         report_interaction_HBox = QHBoxLayout()
         self.report_list = ReportList(self)
         report_list_scroll = QScrollArea()
@@ -88,6 +91,7 @@ class MainWindow(QWidget):
 
     def load_report(self, report_id):
         self.pie_chart.update_chart(dict(self.database.get_pie_chart_data(report_id)))
+        self.timeline_chart.update_chart(self.database.get_timeline_data(report_id))
         self.application_category.update_list(self.database.get_application_category_list(report_id))
         self.report_list.update_list(self.database.get_list_of_reports())
         self.line_chart.update_chart(self.database.get_score_history())
@@ -162,7 +166,7 @@ class ReportList(QWidget):
         self.clear_list()
         self.list = list
         for entry in self.list:
-            self.main_layout.addWidget(ReportItem(entry[0], self))
+            self.main_layout.insertWidget(0, ReportItem(entry[0], self))
     
     def clear_list(self):
         while self.main_layout.count():
@@ -279,6 +283,54 @@ class LineChartWidget(FigureCanvasQTAgg):
         self.ax.set_ylim(0, 100)
         self.ax.set_xticks(report_ids)
 
+        self.ax.spines["top"].set_visible(False)
+        self.ax.spines["right"].set_visible(False)
+
+        self.draw()
+
+class TimelineChartWidget(FigureCanvasQTAgg):
+    def __init__(self):
+        self.fig = Figure(facecolor="none")
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_facecolor("none")
+        super().__init__(self.fig)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background-color: transparent;")
+        self.color_map = {}
+        self.update_chart([])
+
+    def get_color(self, app_name):
+        if app_name not in self.color_map:
+            cmap = plt.get_cmap("tab20")
+            self.color_map[app_name] = cmap(len(self.color_map) % 20)
+        return self.color_map[app_name]
+
+    def update_chart(self, data: list):
+        self.ax.clear()
+
+        if not data:
+            self.ax.set_title("App Timeline")
+            self.ax.set_axis_off()
+            self.draw()
+            return
+
+        t0 = data[0][1]
+        segments_by_app = {}
+        for name, switched_at, duration in data:
+            segments_by_app.setdefault(name, []).append((switched_at - t0, duration))
+
+        apps = list(segments_by_app.keys())
+        for i, app in enumerate(apps):
+            self.ax.broken_barh(
+                segments_by_app[app],
+                (i - 0.4, 0.8),
+                facecolors=self.get_color(app),
+            )
+
+        self.ax.set_yticks(range(len(apps)))
+        self.ax.set_yticklabels(apps)
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_title("App Timeline")
         self.ax.spines["top"].set_visible(False)
         self.ax.spines["right"].set_visible(False)
 
