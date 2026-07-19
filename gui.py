@@ -26,7 +26,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("Focus tracker")
 
-        main_layout = QVBoxLayout()
+        content_layout = QVBoxLayout()
 
         control_panel = QHBoxLayout()
         start_button = QPushButton("Start")
@@ -39,34 +39,52 @@ class MainWindow(QWidget):
 
         self.status_indicator = StatusIndicator()
         control_panel.addWidget(self.status_indicator)
-        main_layout.addLayout(control_panel)
+        content_layout.addLayout(control_panel)
 
         self.pie_chart = PieChartWidget()
-        main_layout.addWidget(self.pie_chart, 2)
+        self.pie_chart.setFixedHeight(350)
+        content_layout.addWidget(self.pie_chart)
 
         self.timeline_chart = TimelineChartWidget()
-        main_layout.addWidget(self.timeline_chart, 1)
+        self.timeline_chart.setFixedHeight(220)
+        content_layout.addWidget(self.timeline_chart)
 
-        report_interaction_HBox = QHBoxLayout()
+        report_interaction_layout = QHBoxLayout()
         self.report_list = ReportList(self)
-        report_list_scroll = QScrollArea()
+        report_list_scroll = NestedScrollArea()
         report_list_scroll.setWidget(self.report_list)
         report_list_scroll.setWidgetResizable(True)
-        report_interaction_HBox.addWidget(report_list_scroll)
+        report_list_scroll.setFixedHeight(200)
+        report_interaction_layout.addWidget(report_list_scroll)
 
         self.application_category = ApplicationCategoryList(self)
-        application_category_scroll = QScrollArea()
+        application_category_scroll = NestedScrollArea()
         application_category_scroll.setWidget(self.application_category)
         application_category_scroll.setWidgetResizable(True)
-        report_interaction_HBox.addWidget(application_category_scroll)
-        main_layout.addLayout(report_interaction_HBox, 1)
+        application_category_scroll.setFixedHeight(200)
+        report_interaction_layout.addWidget(application_category_scroll)
+        content_layout.addLayout(report_interaction_layout)
 
         self.line_chart = LineChartWidget()
-        main_layout.addWidget(self.line_chart, 1)
+        self.line_chart.setFixedHeight(220)
+        content_layout.addWidget(self.line_chart)
+
+        content_layout.addStretch()
+
+        content_widget = QWidget()
+        content_widget.setLayout(content_layout)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(content_widget)
+
+        outer_layout = QVBoxLayout()
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(scroll_area)
+        self.setLayout(outer_layout)
 
         self.load_report(None)
 
-        self.setLayout(main_layout)
         self.resize(800, 800)
     
     def on_start_button_clicked(self):
@@ -214,6 +232,17 @@ class ReportItem(QWidget):
     def delete_button_handler(self, entry_id):
         self.parent_list.delete_entry(entry_id)
 
+class NestedScrollArea(QScrollArea):
+    def wheelEvent(self, event):
+        bar = self.verticalScrollBar()
+        delta = event.angleDelta().y()
+        at_top = bar.value() <= bar.minimum() # type: ignore
+        at_bottom = bar.value() >= bar.maximum() # type: ignore
+        if (delta > 0 and at_top) or (delta < 0 and at_bottom):
+            event.ignore()
+        else:
+            super().wheelEvent(event)
+
 class StatusIndicator(QLabel):
     def __init__(self):
         super().__init__()
@@ -229,7 +258,6 @@ class StatusIndicator(QLabel):
 class PieChartWidget(FigureCanvasQTAgg):
     def __init__(self):
 
-        self.fig = Figure()
         self.fig = Figure(facecolor="none")
         self.ax = self.fig.add_subplot(111)
         self.ax.set_facecolor("none")
@@ -254,6 +282,9 @@ class PieChartWidget(FigureCanvasQTAgg):
         self.ax.set_title("Time per Application")
 
         self.draw()
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 class LineChartWidget(FigureCanvasQTAgg):
     def __init__(self):
@@ -287,6 +318,9 @@ class LineChartWidget(FigureCanvasQTAgg):
         self.ax.spines["right"].set_visible(False)
 
         self.draw()
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 class TimelineChartWidget(FigureCanvasQTAgg):
     def __init__(self):
@@ -335,6 +369,9 @@ class TimelineChartWidget(FigureCanvasQTAgg):
         self.ax.spines["right"].set_visible(False)
 
         self.draw()
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 app = QApplication([])
 window = MainWindow()

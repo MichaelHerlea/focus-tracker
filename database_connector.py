@@ -44,10 +44,10 @@ class Database():
         self.connection_obj.commit()
 
     def create_report(self, data: ApplicationData):
-        if not data._tab_switches:
+        if not data.tab_switches:
             return
-        report_id = self.start_new_report(data._tab_switches[0][1])
-        for element in data._tab_switches:
+        report_id = self.start_new_report(data.tab_switches[0][1])
+        for element in data.tab_switches:
             self.record_tab_switch(report_id, element[0], element[1])
         return report_id
     
@@ -76,9 +76,9 @@ class Database():
             self.connection_obj.commit()
             return application_id[0]
     
-    def record_tab_switch(self, report_id, name, time):
+    def record_tab_switch(self, report_id, name, timestamp):
         record_tab_switch_query = "INSERT INTO events (report_id, application_id, switched_at) VALUES (?, ?, ?)"
-        self.connection_obj.execute(record_tab_switch_query, (report_id, self.get_or_create_application_id(name), time))
+        self.cursor_obj.execute(record_tab_switch_query, (report_id, self.get_or_create_application_id(name), timestamp))
         self.connection_obj.commit()
 
     def delete_report(self, entry_id):

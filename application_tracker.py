@@ -8,8 +8,6 @@ import win32con
 import time
 import threading
 
-#system_processes = {"Microsoft® Windows® Operating System"}
-
 class ApplicationTracker:
     def __init__(self):
         self.application_data = ApplicationData()
@@ -87,13 +85,11 @@ class ApplicationTracker:
             self.thread.join(timeout=2)
 
 class ApplicationData:
-    _tab_switches = []
-
     def __init__(self):
-        pass
+        self.tab_switches = []
 
     def record_tab_switch(self, name, timestamp):
-        self._tab_switches.append((name, timestamp))
+        self.tab_switches.append((name, timestamp))
     
     def clear_data(self):
-        self._tab_switches.clear()
+        self.tab_switches.clear()
