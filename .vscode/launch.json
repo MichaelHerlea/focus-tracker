@@ -6,7 +6,7 @@
             "name": "Launch GUI",
             "type": "debugpy",
             "request": "launch",
-            "program": "gui.py",
+            "program": "${workspaceFolder}/src/focus_tracker/gui.py",
             "console": "integratedTerminal"
         }
     ]
