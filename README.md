@@ -1,15 +1,19 @@
 # Focus Tracker
 
-I wanted to know where my afternoons were actually going, so I built this. It runs quietly in the background on Windows, logs which app is in focus, and shows you where your time went once you stop tracking.
+A lightweight Windows desktop application that tracks which applications you use and visualizes how you spend your time.
+
+I wanted to know where my afternoons were actually going, so I built this application. It runs quietly in the background, logs which app is in focus, and shows you where your time went once you stop tracking.
+
+**Privacy:** All tracking data is stored locally in an SQLite database. No data is uploaded anywhere.
 
 ## What it does
 
-- Tracks foreground app switches automatically (no manual logging) using a Windows event hook
+- Tracks foreground app switches automatically using a Windows event hook
 - Lets you tag each app as productivity / entertainment / other
 - Saves each tracking session as a report with a productivity score
 - Shows a pie chart of time per app, a timeline of switches, and a line chart of your score over past sessions
 
-## Screenshot
+## Example screenshot
 
 ![screenshot](screenshot.png)
 
